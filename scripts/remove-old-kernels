@@ -2,6 +2,7 @@
 import os, sys
 import re
 import subprocess
+import argparse
 
 LINUX_IMAGE_PKG_PREFIX="linux-image-"
 LINUX_IMAGE_PKG_ALL_PATTERN="linux-image(-[^0-9.-]+)*-([0-9.-]+.*)"
@@ -41,8 +42,13 @@ def get_kernels():
 
 	return kernels
 
-def get_running_kernel():
-	out_lines = subprocess.check_output(["uname", "-r"])
+def get_running_kernel(in_version):
+	if not in_version:
+		out_lines = subprocess.check_output(["uname", "-r"])
+	else:
+		# use the specified version
+		out_lines = in_version
+
 	running_kernel = out_lines.split("\n")[0]
 	running_kernel_ver = RUNNING_KERNEL_VER_RE.match(running_kernel)
 	return (running_kernel, running_kernel_ver.group(0))
@@ -51,13 +57,33 @@ def remove_kernel_version(kernel_pkgs):
 	cmd = ["apt", "remove"] + kernel_pkgs.pkg_list
 	print " ".join(cmd)
 
+def kernel_older(ver1, ver2):
+	cmd = ["dpkg", "--compare-versions", ver1, "lt", ver2]
+	ret = subprocess.call(cmd)
+	if ret == 0:
+		return True
+
+	return False
+
+def parse_args():
+	parser = argparse.ArgumentParser(description='Remove old kernels')
+	parser.add_argument("--running-kernel",
+		dest="running_kernel",
+		default=None,
+		action="store",
+		help="Specify a running kernel version (ie. \"4.15.0-13-generic\")")
+
+	return parser.parse_args()
+
 def main():
+	in_args = parse_args()
+
 	kernels = get_kernels()
-	(running_kernel, running_kernel_ver) = get_running_kernel()
+	(running_kernel, running_kernel_ver) = get_running_kernel(in_args.running_kernel)
 	print "Installed kernels: " + ", ".join(sorted(kernels.keys()))
 	print "Running kernel: %s" % (running_kernel,)
 
-	removable_kernel_vers = sorted([ x for x in kernels.keys() if running_kernel != x ])
+	removable_kernel_vers = sorted([ x for x in kernels.keys() if kernel_older(x, running_kernel) ])
 	if removable_kernel_vers:
 		print "Removable kernel versions: " + ", ".join(removable_kernel_vers)
 	else:
