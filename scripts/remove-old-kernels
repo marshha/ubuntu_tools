@@ -4,12 +4,10 @@ import re
 import subprocess
 
 LINUX_IMAGE_PKG_PREFIX="linux-image-"
-LINUX_IMAGE_PKG_PATTERN=LINUX_IMAGE_PKG_PREFIX + "([0-9.-]+.*)"
-LINUX_IMAGE_PKG_ALL_PATTERN="linux-image-[^0-9.-]*-([0-9.-]+.*)"
+LINUX_IMAGE_PKG_ALL_PATTERN="linux-image(-[^0-9.-]+)*-([0-9.-]+.*)"
 
 RUNNING_KERNEL_VER_PATTERN="[0-9.-]+[0-9]"
 
-LINUX_IMAGE_PKG_RE = re.compile(LINUX_IMAGE_PKG_PATTERN)
 LINUX_IMAGE_PKG_ALL_RE = re.compile(LINUX_IMAGE_PKG_ALL_PATTERN)
 
 RUNNING_KERNEL_VER_RE = re.compile(RUNNING_KERNEL_VER_PATTERN)
@@ -18,13 +16,9 @@ class KernelPkgs(object):
 	def __init__(self, version):
 		self.version = version
 		self.pkg_list = []
-		self.main_pkg = None
 
 	def add(self, pkg_name):
 		self.pkg_list.append(pkg_name)
-		pkg_groups = LINUX_IMAGE_PKG_RE.match(pkg_name)
-		if pkg_groups:
-			self.main_pkg = pkg_name
 
 def get_kernels():
 	kernels = {}
@@ -38,10 +32,8 @@ def get_kernels():
 
 		(pkg_name, pkg_ver) = line.split("\t")
 		pkg_groups = LINUX_IMAGE_PKG_ALL_RE.match(pkg_name)
-		if not pkg_groups:
-			pkg_groups = LINUX_IMAGE_PKG_RE.match(pkg_name)
 		if pkg_groups:
-			kernel_ver = pkg_groups.group(1)
+			kernel_ver = pkg_groups.group(2)
 			if kernel_ver not in kernels:
 				kernels[kernel_ver] = KernelPkgs(kernel_ver)
 
