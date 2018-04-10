@@ -1,0 +1,80 @@
+#!/usr/bin/python -B
+import os, sys
+import re
+import subprocess
+
+LINUX_IMAGE_PKG_PREFIX="linux-image-"
+LINUX_IMAGE_PKG_PATTERN=LINUX_IMAGE_PKG_PREFIX + "([0-9.-]+.*)"
+LINUX_IMAGE_PKG_ALL_PATTERN="linux-image-[^0-9.-]*-([0-9.-]+.*)"
+
+RUNNING_KERNEL_VER_PATTERN="[0-9.-]+[0-9]"
+
+LINUX_IMAGE_PKG_RE = re.compile(LINUX_IMAGE_PKG_PATTERN)
+LINUX_IMAGE_PKG_ALL_RE = re.compile(LINUX_IMAGE_PKG_ALL_PATTERN)
+
+RUNNING_KERNEL_VER_RE = re.compile(RUNNING_KERNEL_VER_PATTERN)
+
+class KernelPkgs(object):
+	def __init__(self, version):
+		self.version = version
+		self.pkg_list = []
+		self.main_pkg = None
+
+	def add(self, pkg_name):
+		self.pkg_list.append(pkg_name)
+		pkg_groups = LINUX_IMAGE_PKG_RE.match(pkg_name)
+		if pkg_groups:
+			self.main_pkg = pkg_name
+
+def get_kernels():
+	kernels = {}
+
+	cmd = ["dpkg-query", "-W", "-f=${binary:Package}\t${Version}\n", "linux-image-*"]
+
+	out_lines = subprocess.check_output(cmd)
+	for line in out_lines.split("\n"):
+		if not line:
+			continue
+
+		(pkg_name, pkg_ver) = line.split("\t")
+		pkg_groups = LINUX_IMAGE_PKG_ALL_RE.match(pkg_name)
+		if not pkg_groups:
+			pkg_groups = LINUX_IMAGE_PKG_RE.match(pkg_name)
+		if pkg_groups:
+			kernel_ver = pkg_groups.group(1)
+			if kernel_ver not in kernels:
+				kernels[kernel_ver] = KernelPkgs(kernel_ver)
+
+			kernels[kernel_ver].add(pkg_name)
+
+	return kernels
+
+def get_running_kernel():
+	out_lines = subprocess.check_output(["uname", "-r"])
+	running_kernel = out_lines.split("\n")[0]
+	running_kernel_ver = RUNNING_KERNEL_VER_RE.match(running_kernel)
+	return (running_kernel, running_kernel_ver.group(0))
+
+def remove_kernel_version(kernel_pkgs):
+	cmd = ["apt", "remove"] + kernel_pkgs.pkg_list
+	print " ".join(cmd)
+
+def main():
+	kernels = get_kernels()
+	(running_kernel, running_kernel_ver) = get_running_kernel()
+	print "Installed kernels: " + ", ".join(sorted(kernels.keys()))
+	print "Running kernel: %s" % (running_kernel,)
+
+	removable_kernel_vers = sorted([ x for x in kernels.keys() if running_kernel != x ])
+	if removable_kernel_vers:
+		print "Removable kernel versions: " + ", ".join(removable_kernel_vers)
+	else:
+		print "No removable kernel versions"
+		sys.exit(0)
+
+	print "Run the following commands:"
+	for kernel_ver in removable_kernel_vers:
+		remove_kernel_version(kernels[kernel_ver])
+
+if __name__ == "__main__":
+	main()
